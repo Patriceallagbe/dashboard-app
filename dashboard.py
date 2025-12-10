@@ -66,4 +66,6 @@ st.write("---")
 st.write("⏱ Dernière mise à jour :", data["time"])
 
 # Rafraîchissement auto toutes les 1 seconde
-st.experimental_rerun()
+st.rerun()
+
+
