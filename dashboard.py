@@ -1,71 +1,36 @@
 import streamlit as st
-import paho.mqtt.client as mqtt
-import json
-from datetime import datetime
+import requests
 
-# ====== Variables globales ======
-data = {
-    "temp": 0,
-    "hum": 0,
-    "ldr": 0,
-    "presence": False,
-    "panic": False,
-    "mode_alarme": 0,
-    "time": ""
-}
+CHANNEL_ID = "3197913"
+API_URL = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json?results=1"
 
-# ====== MQTT CALLBACK ======
-def on_message(client, userdata, msg):
-    global data
-    payload = json.loads(msg.payload.decode())
-    payload["time"] = datetime.now().strftime("%H:%M:%S")
-    data.update(payload)
+st.set_page_config(page_title="Node2 Dashboard", layout="wide")
+st.title("📡 Node2 - Dashboard temps réel via ThingSpeak")
 
-# ====== MQTT CONFIG ======
-MQTT_SERVER = "51.103.240.103"
-MQTT_TOPIC = "node2/state"
+try:
+    data = requests.get(API_URL).json()
+    last = data["feeds"][0]
 
-client = mqtt.Client()
-client.on_message = on_message
-client.connect(MQTT_SERVER, 1883, 60)
-client.subscribe(MQTT_TOPIC)
-client.loop_start()
+    temp = last["field1"]
+    hum = last["field2"]
+    ldr = last["field3"]
+    pres = last["field4"]
+    panic = last["field5"]
+    mode = last["field6"]
 
-# ==========================================================
-#                 DASHBOARD STREAMLIT
-# ==========================================================
-st.set_page_config(page_title="ESP32 RTOS - Node2 Dashboard",
-                   page_icon="📡",
-                   layout="wide")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🌡 Température", temp)
+    col2.metric("💧 Humidité", hum)
+    col3.metric("🔆 Lumière", ldr)
 
-st.title("📡 Node2 - Dashboard temps réel (Streamlit)")
+    col4, col5, col6 = st.columns(3)
+    col4.write("👤 Présence : " + ("🟢 OUI" if pres == "1" else "⚪ NON"))
+    col5.write("🚨 Panic : " + ("🔴 ACTIVÉ" if panic == "1" else "⚪ OFF"))
+    col6.write("📢 Mode Alarme : " + str(mode))
 
-col1, col2, col3 = st.columns(3)
+    st.write("---")
+    st.write("📅 Dernière mise à jour :", last["created_at"])
 
-with col1:
-    st.metric("🌡 Température", f"{data['temp']} °C")
-
-with col2:
-    st.metric("💧 Humidité", f"{data['hum']} %")
-
-with col3:
-    st.metric("🔆 Lumière (LDR)", data['ldr'])
-
-col4, col5, col6 = st.columns(3)
-
-with col4:
-    st.write("👤 Présence :", "🟢 OUI" if data["presence"] else "⚪ NON")
-
-with col5:
-    st.write("🚨 Panic Button :", "🔴 ACTIVÉ" if data["panic"] else "⚪ OFF")
-
-with col6:
-    st.write("📢 Mode Alarme :", data["mode_alarme"])
-
-st.write("---")
-st.write("⏱ Dernière mise à jour :", data["time"])
-
-# Rafraîchissement auto toutes les 1 seconde
-st.rerun()
-
-
+except Exception as e:
+    st.error("Impossible de lire ThingSpeak")
+    st.write(e)
