@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 import json
 import paho.mqtt.client as mqtt
 
@@ -6,37 +7,34 @@ import paho.mqtt.client as mqtt
 st.set_page_config(page_title="SAS Security Control Room", layout="wide")
 
 # ================== MQTT CONFIG ==================
-MQTT_BROKER = "51.103.179.122"
+MQTT_BROKER = "51.103.240.103"
 MQTT_PORT = 1883
 MQTT_TOPIC = "sas/dashboard/data"
 
-# ================== SESSION STATE ==================
-if "data" not in st.session_state:
-    st.session_state.data = {
-        "temp": "—",
-        "hum": "—",
-        "ldr": "—",
-        "pres": "0",
-        "panic": "0",
-        "mode": "0"
-    }
+# ================== DATA STORE ==================
+data_store = {
+    "temp": "—",
+    "hum": "—",
+    "ldr": "—",
+    "pres": "0",
+    "panic": "0",
+    "mode": "0"
+}
 
 # ================== MQTT CALLBACK ==================
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
-        st.session_state.data.update(payload)
-    except Exception as e:
-        print("MQTT error:", e)
+        data_store.update(payload)
+    except:
+        pass
 
-# ================== MQTT CLIENT (1 seule fois) ==================
-if "mqtt_started" not in st.session_state:
-    client = mqtt.Client()
-    client.on_message = on_message
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    client.subscribe(MQTT_TOPIC)
-    client.loop_start()
-    st.session_state.mqtt_started = True
+# ================== MQTT CLIENT ==================
+client = mqtt.Client()
+client.on_message = on_message
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client.subscribe(MQTT_TOPIC)
+client.loop_start()
 
 # ================== STYLE ==================
 st.markdown("""
@@ -69,9 +67,14 @@ body { background-color: #0d1117; }
 
 # ================== DASHBOARD ==================
 def afficher_dashboard():
-    d = st.session_state.data
-
     st.markdown("<div class='big-title'>🛡️ SAS SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
+
+    temp = data_store["temp"]
+    hum = data_store["hum"]
+    ldr = data_store["ldr"]
+    pres = data_store["pres"]
+    panic = data_store["panic"]
+    mode = data_store["mode"]
 
     colA, colB, colC = st.columns([1.2, 1.6, 1.2])
 
@@ -80,22 +83,22 @@ def afficher_dashboard():
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.markdown("<div class='status-title'>🚨 ALARME</div>", unsafe_allow_html=True)
 
-        if d["panic"] == 1 or d["panic"] == "1":
+        if panic == "1" or panic == 1:
             st.markdown("🔴 <span class='led-red'>PANIC ACTIVÉ</span>", unsafe_allow_html=True)
-        elif d["mode"] == 1 or d["mode"] == "1":
+        elif mode == "1" or mode == 1:
             st.markdown("🟡 <span class='led-yellow'>ALERTE PIR</span>", unsafe_allow_html=True)
         else:
             st.markdown("🟢 <span class='led-green'>SYSTÈME NORMAL</span>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- ÉTAT DU SAS ----
+    # ---- ETAT SAS ----
     with colB:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.markdown("<div class='status-title'>🏢 ÉTAT DU SAS</div>", unsafe_allow_html=True)
 
-        st.metric("👤 Présence détectée", "OUI" if d["pres"] == 1 or d["pres"] == "1" else "NON")
-        st.metric("📢 Mode alarme", "ACTIF" if d["mode"] == 1 or d["mode"] == "1" else "INACTIF")
+        st.metric("👤 Présence détectée", "OUI" if pres == "1" or pres == 1 else "NON")
+        st.metric("📢 Mode alarme", "ACTIF" if mode == "1" or mode == 1 else "INACTIF")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -104,15 +107,16 @@ def afficher_dashboard():
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.markdown("<div class='status-title'>📡 CAPTEURS</div>", unsafe_allow_html=True)
 
-        st.metric("🌡 Température", f"{d['temp']} °C")
-        st.metric("💧 Humidité", f"{d['hum']} %")
-        st.metric("🔆 LDR", d["ldr"])
+        st.metric("🌡 Température", f"{temp} °C")
+        st.metric("💧 Humidité", f"{hum} %")
+        st.metric("🔆 LDR", ldr)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ================== AFFICHAGE ==================
-afficher_dashboard()
+# ================== AUTO REFRESH ==================
+placeholder = st.empty()
 
-st.markdown("---")
-if st.button("🔄 Rafraîchir"):
-    st.rerun()
+while True:
+    with placeholder.container():
+        afficher_dashboard()
+    time.sleep(1)
