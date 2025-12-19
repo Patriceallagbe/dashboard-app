@@ -10,22 +10,24 @@ st.set_page_config(page_title="SAS Security Control Room", layout="wide")
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT = 1883
 MQTT_TOPIC = "sas/dashboard/data"
+MQTT_CMD_TOPIC = "sas/dashboard/cmd"
 
 # ================== DATA STORE ==================
-data_store = {
-    "temp": "—",
-    "hum": "—",
-    "ldr": "—",
-    "pres": "0",
-    "panic": "0",
-    "mode": "0"
-}
+if "data" not in st.session_state:
+    st.session_state.data = {
+        "temp": "—",
+        "hum": "—",
+        "ldr": "—",
+        "presence": 0,
+        "panic": 0,
+        "mode": 0
+    }
 
 # ================== MQTT CALLBACK ==================
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
-        data_store.update(payload)
+        st.session_state.data.update(payload)
     except:
         pass
 
@@ -34,7 +36,11 @@ client = mqtt.Client()
 client.on_message = on_message
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.subscribe(MQTT_TOPIC)
-client.loop_start()
+
+# ================== COMMANDE DISTANTE ==================
+def send_alarm_cmd(value):
+    payload = json.dumps({"remote_alarm": value})
+    client.publish(MQTT_CMD_TOPIC, payload)
 
 # ================== STYLE ==================
 st.markdown("""
@@ -51,7 +57,6 @@ body { background-color: #0d1117; }
     background-color: #161b22;
     padding: 20px;
     border-radius: 12px;
-    border: 1px solid #30363d;
     color: white;
 }
 .led-green { color: #00ff4c; font-weight: bold; }
@@ -60,63 +65,75 @@ body { background-color: #0d1117; }
 .status-title {
     font-size: 22px;
     font-weight: bold;
-    padding-bottom: 10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ================== DASHBOARD ==================
-def afficher_dashboard():
-    st.markdown("<div class='big-title'>🛡️ SAS SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
+# ================== TITRE ==================
+st.markdown("<div class='big-title'>🛡️ SAS SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
 
-    temp = data_store["temp"]
-    hum = data_store["hum"]
-    ldr = data_store["ldr"]
-    pres = data_store["pres"]
-    panic = data_store["panic"]
-    mode = data_store["mode"]
+# ================== COMMANDES (UNE SEULE FOIS) ==================
+colA, colB, colC = st.columns([1.2, 1.6, 1.2])
 
-    colA, colB, colC = st.columns([1.2, 1.6, 1.2])
+with colA:
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='status-title'>📡 Commande distante</div>", unsafe_allow_html=True)
 
-    # ---- ALARME ----
-    with colA:
-        st.markdown("<div class='panel'>", unsafe_allow_html=True)
-        st.markdown("<div class='status-title'>🚨 ALARME</div>", unsafe_allow_html=True)
+    if st.button("🚨 ACTIVER ALERTE"):
+        send_alarm_cmd(1)
 
-        if panic == "1" or panic == 1:
-            st.markdown("🔴 <span class='led-red'>PANIC ACTIVÉ</span>", unsafe_allow_html=True)
-        elif mode == "1" or mode == 1:
-            st.markdown("🟡 <span class='led-yellow'>ALERTE PIR</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("🟢 <span class='led-green'>SYSTÈME NORMAL</span>", unsafe_allow_html=True)
+    if st.button("🛑 STOP ALERTE"):
+        send_alarm_cmd(0)
 
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- ETAT SAS ----
-    with colB:
-        st.markdown("<div class='panel'>", unsafe_allow_html=True)
-        st.markdown("<div class='status-title'>🏢 ÉTAT DU SAS</div>", unsafe_allow_html=True)
-
-        st.metric("👤 Présence détectée", "OUI" if pres == "1" or pres == 1 else "NON")
-        st.metric("📢 Mode alarme", "ACTIF" if mode == "1" or mode == 1 else "INACTIF")
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # ---- CAPTEURS ----
-    with colC:
-        st.markdown("<div class='panel'>", unsafe_allow_html=True)
-        st.markdown("<div class='status-title'>📡 CAPTEURS</div>", unsafe_allow_html=True)
-
-        st.metric("🌡 Température", f"{temp} °C")
-        st.metric("💧 Humidité", f"{hum} %")
-        st.metric("🔆 LDR", ldr)
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# ================== AUTO REFRESH ==================
-placeholder = st.empty()
+# ================== ZONE RAFRAÎCHIE ==================
+zone = st.empty()
 
 while True:
-    with placeholder.container():
-        afficher_dashboard()
+    client.loop()
+
+    d = st.session_state.data
+
+    # 🔴 LOGIQUE ALARME PRIORITAIRE
+    alarme_active = (d["mode"] == 1) or (d["panic"] == 1)
+
+    with zone.container():
+        c1, c2, c3 = st.columns([1.2, 1.6, 1.2])
+
+        # ---------- ÉTAT ALARME ----------
+        with c1:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.markdown("<div class='status-title'>🚨 ALARME</div>", unsafe_allow_html=True)
+
+            if d["panic"] == 1:
+                st.markdown("🔴 **PANIC ACTIVÉ**")
+            elif d["mode"] == 1:
+                st.markdown("🟡 **ALERTE PIR**")
+            else:
+                st.markdown("🟢 **SYSTÈME NORMAL**")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---------- ÉTAT DU SAS ----------
+        with c2:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.markdown("<div class='status-title'>🏢 ÉTAT DU SAS</div>", unsafe_allow_html=True)
+
+            st.metric("👤 Présence détectée", "OUI" if d["presence"] == 1 else "NON")
+            st.metric("📢 Alarme", "ACTIVE" if alarme_active else "INACTIVE")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---------- CAPTEURS ----------
+        with c3:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.markdown("<div class='status-title'>📡 CAPTEURS</div>", unsafe_allow_html=True)
+
+            st.metric("🌡 Température", f"{d['temp']} °C")
+            st.metric("💧 Humidité", f"{d['hum']} %")
+            st.metric("🔆 LDR", d["ldr"])
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
     time.sleep(1)
