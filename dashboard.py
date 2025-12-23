@@ -3,18 +3,14 @@ import time
 import json
 import paho.mqtt.client as mqtt
 
-# ================== CONFIG PAGE ==================
-st.set_page_config(
-    page_title="SAS Security – Noeud 2",
-    layout="wide"
-)
+# ================= CONFIG =================
+st.set_page_config(page_title="SAS Security – Noeud 2", layout="wide")
 
-# ================== MQTT CONFIG ==================
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT = 1883
 MQTT_TOPIC = "noeud2/state"
 
-# ================== DATA STORE ==================
+# ================= DATA =================
 if "data" not in st.session_state:
     st.session_state.data = {
         "temp": "--",
@@ -29,12 +25,11 @@ if "data" not in st.session_state:
         "global_alarm": 0
     }
 
-# ================== MQTT CALLBACK ==================
+# ================= MQTT =================
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
 
-        # Forcer les types
         for k in [
             "presence", "panic", "temp_alarm",
             "mode_alarme", "system_enabled",
@@ -51,20 +46,19 @@ def on_message(client, userdata, msg):
             payload["ldr"] = int(payload["ldr"])
 
         st.session_state.data.update(payload)
-
     except:
         pass
 
-# ================== MQTT CLIENT ==================
 client = mqtt.Client()
 client.on_message = on_message
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.subscribe(MQTT_TOPIC)
 
-# ================== STYLE ==================
+# ================= STYLE =================
 st.markdown("""
 <style>
 body { background-color: #0d1117; }
+
 .title {
     font-size: 38px;
     font-weight: 800;
@@ -72,69 +66,95 @@ body { background-color: #0d1117; }
     text-align: center;
     margin-bottom: 30px;
 }
+
 .panel {
     background-color: #161b22;
     padding: 22px;
     border-radius: 14px;
     color: white;
 }
+
 .ok { color: #00ff4c; font-weight: bold; }
 .warn { color: #ffe600; font-weight: bold; }
 .alarm { color: #ff2b2b; font-weight: bold; }
+.info { color: #58a6ff; font-weight: bold; }
+
+.box {
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+.box-ok { border-left: 6px solid #00ff4c; }
+.box-warn { border-left: 6px solid #ffe600; }
+.box-alarm { border-left: 6px solid #ff2b2b; }
+.box-info { border-left: 6px solid #58a6ff; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================== TITRE ==================
+# ================= TITRE =================
 st.markdown("<div class='title'>SAS SECURITY – NOEUD 2</div>", unsafe_allow_html=True)
 
 zone = st.empty()
 
-# ================== LOOP ==================
+# ================= LOOP =================
 while True:
     client.loop()
     d = st.session_state.data
 
-    # LOGIQUE ALARME CORRECTE (alignée ESP32)
-    alarme_active = (
-        d["alarm_active"] == 1 or
-        d["global_alarm"] == 1 or
-        d["panic"] == 1 or
-        d["mode_alarme"] != 0
-    )
-
     with zone.container():
         col1, col2, col3 = st.columns(3)
 
-        # ================== COLONNE GAUCHE ==================
+        # ================= COLONNE 1 – ALARMES =================
         with col1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.subheader("État alarme")
+            st.subheader("Alarmes")
 
-            if d["panic"] == 1:
-                st.markdown("<div class='alarm'>PANIC ACTIVÉ</div>", unsafe_allow_html=True)
-            elif d["global_alarm"] == 1:
-                st.markdown("<div class='alarm'>ALARME GLOBALE</div>", unsafe_allow_html=True)
-            elif d["mode_alarme"] == 1:
-                st.markdown("<div class='warn'>ALERTE PIR</div>", unsafe_allow_html=True)
-            elif d["temp_alarm"] == 1:
-                st.markdown("<div class='warn'>ALERTE TEMPÉRATURE</div>", unsafe_allow_html=True)
+            # PANIC
+            if d["panic"]:
+                st.markdown("<div class='box box-alarm alarm'>PANIC ACTIVÉ – DANGER IMMÉDIAT</div>", unsafe_allow_html=True)
             else:
-                st.markdown("<div class='ok'>SYSTÈME NORMAL</div>", unsafe_allow_html=True)
+                st.markdown("<div class='box box-ok ok'>PANIC : inactif</div>", unsafe_allow_html=True)
+
+            # ALARME GLOBALE
+            if d["global_alarm"]:
+                st.markdown("<div class='box box-alarm alarm'>ALARME GLOBALE ACTIVE</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='box box-ok ok'>Alarme globale : inactif</div>", unsafe_allow_html=True)
+
+            # TEMPÉRATURE
+            if d["temp_alarm"]:
+                st.markdown("<div class='box box-warn warn'>TEMPÉRATURE TROP ÉLEVÉE – RISQUE</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='box box-ok ok'>Température : normale</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # ================== COLONNE MILIEU ==================
+        # ================= COLONNE 2 – ÉTAT SYSTÈME =================
         with col2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du système")
 
-            st.metric("Système", "ON" if d["system_enabled"] else "OFF")
-            st.metric("Présence", "OUI" if d["presence"] else "NON")
-            st.metric("Alarme active", "OUI" if alarme_active else "NON")
+            # SYSTÈME
+            if d["system_enabled"]:
+                st.markdown("<div class='box box-info info'>Système : ACTIVÉ</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='box box-alarm alarm'>Système : DÉSACTIVÉ</div>", unsafe_allow_html=True)
+
+            # PRÉSENCE
+            if d["presence"]:
+                st.markdown("<div class='box box-warn warn'>PRÉSENCE DÉTECTÉE DANS LE SAS</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='box box-ok ok'>Aucune présence détectée</div>", unsafe_allow_html=True)
+
+            # ALARME ACTIVE
+            if d["alarm_active"]:
+                st.markdown("<div class='box box-alarm alarm'>ALARME EN COURS</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='box box-ok ok'>Aucune alarme active</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # ================== COLONNE DROITE ==================
+        # ================= COLONNE 3 – CAPTEURS =================
         with col3:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Capteurs")
