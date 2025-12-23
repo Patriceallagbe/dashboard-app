@@ -4,7 +4,7 @@ import json
 import paho.mqtt.client as mqtt
 
 # ================= CONFIG =================
-st.set_page_config(page_title="SAS Security – Noeud 2", layout="wide")
+st.set_page_config(page_title="SAS Security – ephec room", layout="wide")
 
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
@@ -170,3 +170,4 @@ while True:
             st.markdown("</div>", unsafe_allow_html=True)
 
     time.sleep(0.5)
+
