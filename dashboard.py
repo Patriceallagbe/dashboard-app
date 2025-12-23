@@ -1,6 +1,6 @@
 import streamlit as st
-import json
 import time
+import json
 import paho.mqtt.client as mqtt
 
 # ================= CONFIG =================
@@ -31,6 +31,9 @@ def on_connect(client, userdata, flags, rc):
     else:
         st.session_state.mqtt_status = "Erreur connexion"
 
+def on_disconnect(client, userdata, rc):
+    st.session_state.mqtt_status = "Déconnecté"
+
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
@@ -42,66 +45,102 @@ def on_message(client, userdata, msg):
 # ================= MQTT CLIENT =================
 client = mqtt.Client()
 client.on_connect = on_connect
+client.on_disconnect = on_disconnect
 client.on_message = on_message
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
-# ================= UI =================
-st.title("SAS SECURITY – NOEUD 2")
+# ================= STYLE =================
+st.markdown("""
+<style>
+body { background-color:#0d1117; }
+.title { font-size:36px; font-weight:800; color:#00d4ff; text-align:center; margin-bottom:15px; }
+.status { text-align:center; margin-bottom:20px; }
+.panel { background:#161b22; padding:22px; border-radius:14px; color:white; }
+.msg { padding:14px 16px; border-radius:12px; margin:10px 0; background:#0d1117; }
+.ok { color:#00ff4c; font-weight:700; }
+.warn { color:#ffe600; font-weight:700; }
+.alarm { color:#ff2b2b; font-weight:800; }
+.muted { color:#9aa4b2; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<div class='title'>SAS SECURITY – NOEUD 2</div>", unsafe_allow_html=True)
+
+status_color = "ok" if st.session_state.mqtt_status == "Connecté" else "alarm"
+
+st.markdown(
+    f"<div class='status {status_color}'>MQTT : {st.session_state.mqtt_status} | "
+    f"Dernière mise à jour : {st.session_state.last_update}</div>",
+    unsafe_allow_html=True
+)
 
 # 🔄 BOUTON REFRESH
 if st.button("🔄 Rafraîchir les données"):
     client.loop(timeout=1.0)
 
-st.caption(f"MQTT : {st.session_state.mqtt_status} | Dernière mise à jour : {st.session_state.last_update}")
+zone = st.empty()
 
-d = st.session_state.data
-now = time.time()
+# ================= LOOP PRINCIPALE =================
+while True:
+    client.loop(timeout=0.1)
+    d = st.session_state.data
+    now = time.time()
 
-# ===== LECTURE SAFE =====
-presence = int(d.get("presence", 0) or 0)
-panic = int(d.get("panic", 0) or 0)
-temp_alarm = int(d.get("temp_alarm", 0) or 0)
-mode_alarme = int(d.get("mode_alarme", 0) or 0)
-system_enabled = int(d.get("system_enabled", 0) or 0)
+    presence = int(d.get("presence", 0) or 0)
+    panic = int(d.get("panic", 0) or 0)
+    temp_alarm = int(d.get("temp_alarm", 0) or 0)
+    mode_alarme = int(d.get("mode_alarme", 0) or 0)
+    system_enabled = int(d.get("system_enabled", 0) or 0)
 
-temp = d.get("temp", "--")
-hum  = d.get("hum", "--")
-ldr  = d.get("ldr", "--")
+    temp = d.get("temp", "--")
+    hum  = d.get("hum", "--")
+    ldr  = d.get("ldr", "--")
 
-# ===== PORTE SAS (5s) =====
-if system_enabled == 0 and st.session_state.door_open_until < now:
-    st.session_state.door_open_until = now + 5
+    if system_enabled == 0 and st.session_state.door_open_until < now:
+        st.session_state.door_open_until = now + 5
 
-door_open = now < st.session_state.door_open_until
+    door_open = now < st.session_state.door_open_until
 
-col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
+    system_txt = "Sécurité activée" if system_enabled else "Sécurité désactivée"
+    security_txt = "SAS sécurisé" if system_enabled else "SAS non sécurisé"
+    door_txt = "Porte SAS ouverte" if door_open else "Porte SAS fermée"
 
-# ===== ÉTAT DU SAS =====
-with col1:
-    st.subheader("État du SAS")
-    st.success("Sécurité activée" if system_enabled else "Sécurité désactivée")
-    st.info("Porte ouverte" if door_open else "Porte fermée")
-    st.info("Panic disponible")
+    with zone.container():
+        col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
-# ===== ÉVÉNEMENTS =====
-with col2:
-    st.subheader("Événements")
+        with col1:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.subheader("État du SAS")
+            st.markdown(f"<div class='msg ok'>• {system_txt}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='msg ok'>• {door_txt}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='msg ok'>• {security_txt}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='msg ok'>• Panic disponible</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    if presence:
-        st.warning("Présence détectée dans le SAS")
-    if temp_alarm:
-        st.error("Température anormalement élevée")
-    if mode_alarme == 2:
-        st.error("ALARME DÉCLENCHÉE")
-    if panic:
-        st.error("PANIC ACTIVÉ")
+        with col2:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.subheader("Événements")
 
-    if not any([presence, panic, temp_alarm, mode_alarme == 2]):
-        st.write("Aucun événement critique")
+            if presence:
+                st.markdown("<div class='msg warn'>• Présence détectée</div>", unsafe_allow_html=True)
+            if temp_alarm:
+                st.markdown("<div class='msg alarm'>• Température anormale</div>", unsafe_allow_html=True)
+            if mode_alarme == 2:
+                st.markdown("<div class='msg alarm'>• ALARME DÉCLENCHÉE</div>", unsafe_allow_html=True)
+            if panic:
+                st.markdown("<div class='msg alarm'>• PANIC ACTIVÉ</div>", unsafe_allow_html=True)
 
-# ===== CAPTEURS =====
-with col3:
-    st.subheader("Capteurs")
-    st.metric("Température (°C)", temp)
-    st.metric("Humidité (%)", hum)
-    st.metric("Luminosité (LDR)", ldr)
+            if not any([presence, panic, temp_alarm, mode_alarme == 2]):
+                st.markdown("<div class='msg muted'>• Aucun événement critique</div>", unsafe_allow_html=True)
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with col3:
+            st.markdown("<div class='panel'>", unsafe_allow_html=True)
+            st.subheader("Capteurs")
+            st.metric("Température (°C)", temp)
+            st.metric("Humidité (%)", hum)
+            st.metric("Luminosité (LDR)", ldr)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    time.sleep(1)
