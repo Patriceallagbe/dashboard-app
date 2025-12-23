@@ -23,7 +23,7 @@ if "last_update" not in st.session_state:
 if "mqtt_status" not in st.session_state:
     st.session_state.mqtt_status = "Déconnecté"
 
-# LATCH ÉVÉNEMENTS
+# LATCHS
 if "presence_latched" not in st.session_state:
     st.session_state.presence_latched = 0
 
@@ -92,34 +92,34 @@ st.markdown(
 
 zone = st.empty()
 
-# ================= LOOP PRINCIPALE =================
+# ================= LOOP =================
 while True:
     client.loop(timeout=0.1)
     d = st.session_state.data
 
-    # ===== LECTURE MQTT =====
-    presence        = int(d.get("presence", 0))   # PIR UNIQUEMENT
-    panic           = int(d.get("panic", 0))
-    temp_alarm      = int(d.get("temp_alarm", 0))
-    mode_alarme     = int(d.get("mode_alarme", 0))
-    system_enabled  = int(d.get("system_enabled", 0))
+    # ===== DONNÉES MQTT =====
+    presence       = int(d.get("presence", 0))
+    panic          = int(d.get("panic", 0))
+    temp_alarm     = int(d.get("temp_alarm", 0))
+    mode_alarme    = int(d.get("mode_alarme", 0))
+    system_enabled = int(d.get("system_enabled", 0))
 
     temp = d.get("temp", "--")
     hum  = d.get("hum", "--")
     ldr  = d.get("ldr", "--")
 
-    # ===== LATCH LOGIC =====
+    # ===== LATCH PRÉSENCE =====
     if presence == 1:
         st.session_state.presence_latched = 1
+    if mode_alarme == 0 and presence == 0:
+        st.session_state.presence_latched = 0
 
+    # ===== LATCH PANIC (LOGIQUE CORRIGÉE) =====
     if panic == 1:
         st.session_state.panic_latched = 1
 
     if mode_alarme == 0:
-        if presence == 0:
-            st.session_state.presence_latched = 0
-        if panic == 0:
-            st.session_state.panic_latched = 0
+        st.session_state.panic_latched = 0
 
     presence_event = st.session_state.presence_latched
     panic_event    = st.session_state.panic_latched
@@ -154,7 +154,13 @@ while True:
                 unsafe_allow_html=True
             )
 
-            st.markdown("<div class='msg ok'>• Panic disponible</div>", unsafe_allow_html=True)
+            # 🔥 PANIC DISPONIBLE / INDISPONIBLE
+            st.markdown(
+                f"<div class='msg {'bad' if panic_event else 'ok'}'>"
+                f"• {'Panic indisponible' if panic_event else 'Panic disponible'}</div>",
+                unsafe_allow_html=True
+            )
+
             st.markdown("</div>", unsafe_allow_html=True)
 
         # ===== ÉVÉNEMENTS =====
