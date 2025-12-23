@@ -3,14 +3,18 @@ import time
 import json
 import paho.mqtt.client as mqtt
 
-# ================= CONFIG =================
-st.set_page_config(page_title="SAS Security Dashboard", layout="wide")
+# ================== CONFIG PAGE ==================
+st.set_page_config(
+    page_title="SAS Security – Noeud 2",
+    layout="wide"
+)
 
+# ================== MQTT CONFIG ==================
 MQTT_BROKER = "51.103.240.103"
-MQTT_PORT   = 1883
-MQTT_TOPIC  = "noeud2/state"
+MQTT_PORT = 1883
+MQTT_TOPIC = "noeud2/state"
 
-# ================= DATA =================
+# ================== DATA STORE ==================
 if "data" not in st.session_state:
     st.session_state.data = {
         "temp": "--",
@@ -18,21 +22,24 @@ if "data" not in st.session_state:
         "ldr": "--",
         "presence": 0,
         "panic": 0,
-        "mode_alarme": 0,
         "temp_alarm": 0,
+        "mode_alarme": 0,
         "system_enabled": 1,
         "alarm_active": 0,
         "global_alarm": 0
     }
 
-# ================= MQTT CALLBACK =================
+# ================== MQTT CALLBACK ==================
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
 
-        # forcer types
-        for k in ["presence","panic","mode_alarme","temp_alarm",
-                  "system_enabled","alarm_active","global_alarm"]:
+        # Forcer les types
+        for k in [
+            "presence", "panic", "temp_alarm",
+            "mode_alarme", "system_enabled",
+            "alarm_active", "global_alarm"
+        ]:
             if k in payload:
                 payload[k] = int(payload[k])
 
@@ -45,16 +52,16 @@ def on_message(client, userdata, msg):
 
         st.session_state.data.update(payload)
 
-    except Exception:
+    except:
         pass
 
-# ================= MQTT CLIENT =================
+# ================== MQTT CLIENT ==================
 client = mqtt.Client()
 client.on_message = on_message
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
 client.subscribe(MQTT_TOPIC)
 
-# ================= STYLE =================
+# ================== STYLE ==================
 st.markdown("""
 <style>
 body { background-color: #0d1117; }
@@ -63,11 +70,11 @@ body { background-color: #0d1117; }
     font-weight: 800;
     color: #00d4ff;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
 }
 .panel {
     background-color: #161b22;
-    padding: 20px;
+    padding: 22px;
     border-radius: 14px;
     color: white;
 }
@@ -77,21 +84,29 @@ body { background-color: #0d1117; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= TITLE =================
+# ================== TITRE ==================
 st.markdown("<div class='title'>SAS SECURITY – NOEUD 2</div>", unsafe_allow_html=True)
 
 zone = st.empty()
 
-# ================= LOOP =================
+# ================== LOOP ==================
 while True:
     client.loop()
     d = st.session_state.data
 
-    with zone.container():
-        c1, c2, c3 = st.columns(3)
+    # LOGIQUE ALARME CORRECTE (alignée ESP32)
+    alarme_active = (
+        d["alarm_active"] == 1 or
+        d["global_alarm"] == 1 or
+        d["panic"] == 1 or
+        d["mode_alarme"] != 0
+    )
 
-        # -------- ALARME --------
-        with c1:
+    with zone.container():
+        col1, col2, col3 = st.columns(3)
+
+        # ================== COLONNE GAUCHE ==================
+        with col1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État alarme")
 
@@ -101,30 +116,32 @@ while True:
                 st.markdown("<div class='alarm'>ALARME GLOBALE</div>", unsafe_allow_html=True)
             elif d["mode_alarme"] == 1:
                 st.markdown("<div class='warn'>ALERTE PIR</div>", unsafe_allow_html=True)
+            elif d["temp_alarm"] == 1:
+                st.markdown("<div class='warn'>ALERTE TEMPÉRATURE</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='ok'>SYSTÈME NORMAL</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # -------- ÉTAT SAS --------
-        with c2:
+        # ================== COLONNE MILIEU ==================
+        with col2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du système")
 
             st.metric("Système", "ON" if d["system_enabled"] else "OFF")
             st.metric("Présence", "OUI" if d["presence"] else "NON")
-            st.metric("Alarme active", "OUI" if d["alarm_active"] else "NON")
+            st.metric("Alarme active", "OUI" if alarme_active else "NON")
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # -------- CAPTEURS --------
-        with c3:
+        # ================== COLONNE DROITE ==================
+        with col3:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Capteurs")
 
             st.metric("Température (°C)", d["temp"])
             st.metric("Humidité (%)", d["hum"])
-            st.metric("LDR", d["ldr"])
+            st.metric("Luminosité (LDR)", d["ldr"])
 
             st.markdown("</div>", unsafe_allow_html=True)
 
