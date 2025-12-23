@@ -1,7 +1,6 @@
 import streamlit as st
 import json
 import time
-import threading
 import paho.mqtt.client as mqtt
 
 # ================= CONFIG =================
@@ -24,124 +23,85 @@ if "mqtt_status" not in st.session_state:
 if "door_open_until" not in st.session_state:
     st.session_state.door_open_until = 0
 
-if "mqtt_started" not in st.session_state:
-    st.session_state.mqtt_started = False
-
-# ================= MQTT THREAD =================
-def mqtt_worker():
-    def on_connect(client, userdata, flags, rc):
+# ================= MQTT CALLBACKS =================
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
         st.session_state.mqtt_status = "Connecté"
         client.subscribe(MQTT_TOPIC)
+    else:
+        st.session_state.mqtt_status = "Erreur connexion"
 
-    def on_disconnect(client, userdata, rc):
-        st.session_state.mqtt_status = "Déconnecté"
+def on_message(client, userdata, msg):
+    try:
+        payload = json.loads(msg.payload.decode())
+        st.session_state.data.update(payload)
+        st.session_state.last_update = time.strftime("%H:%M:%S")
+    except:
+        pass
 
-    def on_message(client, userdata, msg):
-        try:
-            payload = json.loads(msg.payload.decode())
-            st.session_state.data.update(payload)
-            st.session_state.last_update = time.strftime("%H:%M:%S")
-        except:
-            pass
+# ================= MQTT CLIENT =================
+client = mqtt.Client()
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-    client.on_message = on_message
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    client.loop_forever()
+# ================= UI =================
+st.title("SAS SECURITY – NOEUD 2")
 
-# ================= START MQTT =================
-if not st.session_state.mqtt_started:
-    threading.Thread(target=mqtt_worker, daemon=True).start()
-    st.session_state.mqtt_started = True
+# 🔄 BOUTON REFRESH
+if st.button("🔄 Rafraîchir les données"):
+    client.loop(timeout=1.0)
 
-# ================= STYLE =================
-st.markdown("""
-<style>
-body { background:#0d1117; }
-.title { font-size:36px; font-weight:800; color:#00d4ff; text-align:center; margin-bottom:10px; }
-.status { text-align:center; margin-bottom:15px; }
-.panel { background:#161b22; padding:20px; border-radius:14px; color:white; }
-.msg { padding:12px; border-radius:10px; margin:8px 0; background:#0d1117; }
-.ok { color:#00ff4c; font-weight:700; }
-.warn { color:#ffe600; font-weight:700; }
-.alarm { color:#ff2b2b; font-weight:800; }
-.muted { color:#9aa4b2; }
-</style>
-""", unsafe_allow_html=True)
+st.caption(f"MQTT : {st.session_state.mqtt_status} | Dernière mise à jour : {st.session_state.last_update}")
 
-st.markdown("<div class='title'>SAS SECURITY – NOEUD 2</div>", unsafe_allow_html=True)
+d = st.session_state.data
+now = time.time()
 
-status_color = "ok" if st.session_state.mqtt_status == "Connecté" else "alarm"
-st.markdown(
-    f"<div class='status {status_color}'>MQTT : {st.session_state.mqtt_status} | "
-    f"Dernière mise à jour : {st.session_state.last_update}</div>",
-    unsafe_allow_html=True
-)
+# ===== LECTURE SAFE =====
+presence = int(d.get("presence", 0) or 0)
+panic = int(d.get("panic", 0) or 0)
+temp_alarm = int(d.get("temp_alarm", 0) or 0)
+mode_alarme = int(d.get("mode_alarme", 0) or 0)
+system_enabled = int(d.get("system_enabled", 0) or 0)
 
-# ================= UI ZONE =================
-zone = st.empty()
+temp = d.get("temp", "--")
+hum  = d.get("hum", "--")
+ldr  = d.get("ldr", "--")
 
-# ================= UI LOOP =================
-while True:
-    d = st.session_state.data
-    now = time.time()
+# ===== PORTE SAS (5s) =====
+if system_enabled == 0 and st.session_state.door_open_until < now:
+    st.session_state.door_open_until = now + 5
 
-    presence = int(d.get("presence", 0) or 0)
-    panic = int(d.get("panic", 0) or 0)
-    temp_alarm = int(d.get("temp_alarm", 0) or 0)
-    mode_alarme = int(d.get("mode_alarme", 0) or 0)
-    system_enabled = int(d.get("system_enabled", 0) or 0)
+door_open = now < st.session_state.door_open_until
 
-    temp = d.get("temp", "--")
-    hum  = d.get("hum", "--")
-    ldr  = d.get("ldr", "--")
+col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
-    # ===== PORTE SAS (5s) =====
-    if system_enabled == 0 and st.session_state.door_open_until < now:
-        st.session_state.door_open_until = now + 5
+# ===== ÉTAT DU SAS =====
+with col1:
+    st.subheader("État du SAS")
+    st.success("Sécurité activée" if system_enabled else "Sécurité désactivée")
+    st.info("Porte ouverte" if door_open else "Porte fermée")
+    st.info("Panic disponible")
 
-    door_open = now < st.session_state.door_open_until
+# ===== ÉVÉNEMENTS =====
+with col2:
+    st.subheader("Événements")
 
-    with zone.container():
-        col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
+    if presence:
+        st.warning("Présence détectée dans le SAS")
+    if temp_alarm:
+        st.error("Température anormalement élevée")
+    if mode_alarme == 2:
+        st.error("ALARME DÉCLENCHÉE")
+    if panic:
+        st.error("PANIC ACTIVÉ")
 
-        # ===== ÉTAT SAS =====
-        with col1:
-            st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.subheader("État du SAS")
-            st.markdown(f"<div class='msg ok'>Sécurité {'activée' if system_enabled else 'désactivée'}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='msg ok'>Porte {'ouverte' if door_open else 'fermée'}</div>", unsafe_allow_html=True)
-            st.markdown("<div class='msg ok'>Panic disponible</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+    if not any([presence, panic, temp_alarm, mode_alarme == 2]):
+        st.write("Aucun événement critique")
 
-        # ===== ÉVÉNEMENTS =====
-        with col2:
-            st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.subheader("Événements")
-
-            if presence:
-                st.markdown("<div class='msg warn'>Présence détectée dans le SAS</div>", unsafe_allow_html=True)
-            if temp_alarm:
-                st.markdown("<div class='msg alarm'>Température anormalement élevée</div>", unsafe_allow_html=True)
-            if mode_alarme == 2:
-                st.markdown("<div class='msg alarm'>ALARME DÉCLENCHÉE</div>", unsafe_allow_html=True)
-            if panic:
-                st.markdown("<div class='msg alarm'>PANIC ACTIVÉ</div>", unsafe_allow_html=True)
-
-            if not any([presence, panic, temp_alarm, mode_alarme == 2]):
-                st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ===== CAPTEURS =====
-        with col3:
-            st.markdown("<div class='panel'>", unsafe_allow_html=True)
-            st.subheader("Capteurs")
-            st.metric("Température (°C)", temp)
-            st.metric("Humidité (%)", hum)
-            st.metric("Luminosité (LDR)", ldr)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    time.sleep(0.15)  # ⚡ ~150 ms = ULTRA RÉACTIF
+# ===== CAPTEURS =====
+with col3:
+    st.subheader("Capteurs")
+    st.metric("Température (°C)", temp)
+    st.metric("Humidité (%)", hum)
+    st.metric("Luminosité (LDR)", ldr)
