@@ -82,24 +82,26 @@ while True:
     client.loop(timeout=0.1)
     d = st.session_state.data
 
-    # ===== LECTURE SÉCURISÉE =====
-    presence        = int(d.get("presence", 0) or 0)
-    panic           = int(d.get("panic", 0) or 0)
-    temp_alarm      = int(d.get("temp_alarm", 0) or 0)
-    mode_alarme     = int(d.get("mode_alarme", 0) or 0)
-    system_enabled  = int(d.get("system_enabled", 0) or 0)
+    # ===== LECTURE DES DONNÉES =====
+    presence       = int(d.get("presence", 0) or 0)
+    panic          = int(d.get("panic", 0) or 0)
+    temp_alarm     = int(d.get("temp_alarm", 0) or 0)
+    mode_alarme    = int(d.get("mode_alarme", 0) or 0)
+    system_enabled = int(d.get("system_enabled", 0) or 0)
 
     temp = d.get("temp", "--")
     hum  = d.get("hum", "--")
     ldr  = d.get("ldr", "--")
 
-    # ===== LOGIQUE PORTE SIMPLE =====
+    # ===== PORTE =====
     door_open = (system_enabled == 0)
 
-    # ===== TEXTES =====
     system_txt   = "Sécurité activée" if system_enabled else "Sécurité désactivée"
     security_txt = "SAS sécurisé" if system_enabled else "SAS non sécurisé"
     door_txt     = "Porte SAS ouverte" if door_open else "Porte SAS fermée"
+
+    # ===== LOGIQUE PRÉSENCE CORRECTE =====
+    presence_event = (presence == 1) or (mode_alarme != 0)
 
     with zone.container():
         col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
@@ -114,53 +116,38 @@ while True:
             st.markdown("<div class='msg ok'>• Panic disponible</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # ===== ÉVÉNEMENTS (AVEC PRESENCE CLAIRE) =====
+        # ===== ÉVÉNEMENTS =====
         with col2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
 
-            # Présence
-            if presence == 1:
+            if presence_event:
                 st.markdown(
                     "<div class='msg warn'>• Présence détectée dans le SAS</div>",
                     unsafe_allow_html=True
                 )
-            else:
-                st.markdown(
-                    "<div class='msg ok'>• Aucune présence détectée</div>",
-                    unsafe_allow_html=True
-                )
 
-            # Température
-            if temp_alarm == 1:
+            if temp_alarm:
                 st.markdown(
                     "<div class='msg alarm'>• Température anormalement élevée – danger</div>",
                     unsafe_allow_html=True
                 )
 
-            # Alarme globale
             if mode_alarme == 2:
                 st.markdown(
                     "<div class='msg alarm'>• Alarme déclenchée</div>",
                     unsafe_allow_html=True
                 )
 
-            # Panic
-            if panic == 1:
+            if panic:
                 st.markdown(
                     "<div class='msg alarm'>• PANIC ACTIVÉ – danger immédiat</div>",
                     unsafe_allow_html=True
                 )
 
-            # Situation normale
-            if (
-                presence == 0 and
-                panic == 0 and
-                temp_alarm == 0 and
-                mode_alarme != 2
-            ):
+            if not any([presence_event, panic, temp_alarm, mode_alarme == 2]):
                 st.markdown(
-                    "<div class='msg muted'>• Situation normale</div>",
+                    "<div class='msg ok'>• Zone sécurisée</div>",
                     unsafe_allow_html=True
                 )
 
