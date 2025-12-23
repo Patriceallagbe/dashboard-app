@@ -20,9 +20,12 @@ if "last_update" not in st.session_state:
 if "mqtt_status" not in st.session_state:
     st.session_state.mqtt_status = "Déconnecté"
 
-# 🔒 mémoire présence PIR
+# 🔒 MÉMOIRES (LATCH)
 if "presence_latched" not in st.session_state:
     st.session_state.presence_latched = 0
+
+if "panic_latched" not in st.session_state:
+    st.session_state.panic_latched = 0
 
 # ================= MQTT CALLBACKS =================
 def on_connect(client, userdata, flags, rc):
@@ -75,7 +78,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ================= BOUTON REFRESH =================
+# ================= REFRESH =================
 if st.button("🔄 Rafraîchir"):
     client.loop(timeout=1.0)
 
@@ -98,15 +101,22 @@ while True:
     hum  = d.get("hum", "--")
     ldr  = d.get("ldr", "--")
 
-    # ===== MÉMOIRE DE PRÉSENCE (PIR SEULEMENT) =====
+    # ===== LATCH PRÉSENCE (PIR SEULEMENT) =====
     if presence == 1:
         st.session_state.presence_latched = 1
 
-    # reset uniquement quand tout est fini
     if mode_alarme == 0 and presence == 0:
         st.session_state.presence_latched = 0
 
+    # ===== LATCH PANIC (BOUTON SEULEMENT) =====
+    if panic == 1:
+        st.session_state.panic_latched = 1
+
+    if mode_alarme == 0 and panic == 0:
+        st.session_state.panic_latched = 0
+
     presence_event = st.session_state.presence_latched
+    panic_event    = st.session_state.panic_latched
 
     # ===== PORTE =====
     door_open = (system_enabled == 0)
@@ -118,7 +128,7 @@ while True:
     with zone.container():
         col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
-        # ===== ÉTAT SAS =====
+        # ===== ÉTAT =====
         with col1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du SAS")
@@ -139,13 +149,13 @@ while True:
             if temp_alarm:
                 st.markdown("<div class='msg alarm'>• Température anormalement élevée – danger</div>", unsafe_allow_html=True)
 
+            if panic_event:
+                st.markdown("<div class='msg alarm'>• PANIC ACTIVÉ – danger immédiat</div>", unsafe_allow_html=True)
+
             if mode_alarme == 2:
                 st.markdown("<div class='msg alarm'>• Alarme déclenchée</div>", unsafe_allow_html=True)
 
-            if panic:
-                st.markdown("<div class='msg alarm'>• PANIC ACTIVÉ – danger immédiat</div>", unsafe_allow_html=True)
-
-            if not any([presence_event, panic, temp_alarm, mode_alarme == 2]):
+            if not any([presence_event, panic_event, temp_alarm, mode_alarme == 2]):
                 st.markdown("<div class='msg muted'>• Aucun événement critique</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
