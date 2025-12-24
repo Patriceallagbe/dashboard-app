@@ -30,7 +30,7 @@ if "panic_latched" not in st.session_state:
 if "temp_latched" not in st.session_state:
     st.session_state.temp_latched = 0
 
-# MQTT CLIENT INIT (UNE SEULE FOIS)
+# ================= MQTT CLIENT (UNE SEULE FOIS) =================
 if "mqtt_client" not in st.session_state:
 
     def on_connect(client, userdata, flags, rc):
@@ -42,7 +42,7 @@ if "mqtt_client" not in st.session_state:
             payload = json.loads(msg.payload.decode())
             st.session_state.data.update(payload)
             st.session_state.last_update = time.strftime("%H:%M:%S")
-        except:
+        except Exception:
             pass
 
     client = mqtt.Client()
@@ -90,10 +90,7 @@ body { background:#0d1117; }
 """, unsafe_allow_html=True)
 
 # ================= TITRE =================
-st.markdown(
-    "<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>",
-    unsafe_allow_html=True
-)
+st.markdown("<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
 
 # ================= DATA =================
 d = st.session_state.data
@@ -145,7 +142,7 @@ zone = st.empty()
 with zone.container():
     col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
-    # ===== ÉTAT DU SAS =====
+    # ================= ETAT DU SAS =================
     with col1:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("État du SAS")
@@ -170,44 +167,25 @@ with zone.container():
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ===== EVENEMENTS =====
+    # ================= EVENEMENTS =================
     with col2:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("Événements")
 
         if panic_event:
-            st.markdown(
-                "<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown("<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>", unsafe_allow_html=True)
         elif temp_event:
-            st.markdown(
-                "<div class='msg bad'>🔥 Température critique détectée</div>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown("<div class='msg bad'>🔥 Température critique détectée</div>", unsafe_allow_html=True)
         elif presence_event:
-            st.markdown(
-                "<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown("<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
         elif alarm_from_node1:
-            st.markdown(
-                "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC SAS</div>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown("<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC SAS</div>", unsafe_allow_html=True)
         else:
-            st.markdown(
-                "<div class='msg muted'>Aucun événement critique</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ===== CAPTEURS =====
+    # ================= CAPTEURS =================
     with col3:
         st.markdown("<div class='panel'>", unsafe_allow_html=True)
         st.subheader("Capteurs")
@@ -216,5 +194,10 @@ with zone.container():
         st.metric("Luminosité", ldr)
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ================= AUTO REFRESH =================
-st.autorefresh(interval=500, key="refresh")
+# ================= REFRESH SANS LIB EXTERNE =================
+time.sleep(0.5)
+try:
+    st.experimental_rerun()
+except Exception:
+    # si ta version Streamlit bloque rerun, ça n'explose pas
+    pass
