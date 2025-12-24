@@ -13,7 +13,7 @@ MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
 MQTT_TOPIC  = "noeud2/state"
 
-# ================= SESSION =================
+# ================= SESSION STATE =================
 if "data" not in st.session_state:
     st.session_state.data = {}
 
@@ -26,6 +26,9 @@ if "presence_latched" not in st.session_state:
 
 if "panic_latched" not in st.session_state:
     st.session_state.panic_latched = 0
+
+if "temp_latched" not in st.session_state:
+    st.session_state.temp_latched = 0
 
 # ================= MQTT =================
 def on_connect(client, userdata, flags, rc):
@@ -94,10 +97,10 @@ while True:
     d = st.session_state.data
 
     # ===== MQTT DATA =====
-    presence       = int(d.get("presence", 0))   # PIR UNIQUEMENT
+    presence       = int(d.get("presence", 0))     # PIR
     panic          = int(d.get("panic", 0))
     temp_alarm     = int(d.get("temp_alarm", 0))
-    mode_alarme    = int(d.get("mode_alarme", 0))
+    mode_alarme    = int(d.get("mode_alarme", 0))  # 0 = OFF / 2 = ALARME
     system_enabled = int(d.get("system_enabled", 0))
 
     temp = d.get("temp", "--")
@@ -111,24 +114,29 @@ while True:
     if panic == 1:
         st.session_state.panic_latched = 1
 
-    # reset latch UNIQUEMENT quand l’alarme est finie
+    if temp_alarm == 1:
+        st.session_state.temp_latched = 1
+
+    # RESET UNIQUEMENT quand l’alarme est désactivée
     if mode_alarme == 0:
         st.session_state.presence_latched = 0
         st.session_state.panic_latched = 0
+        st.session_state.temp_latched = 0
 
     presence_event = st.session_state.presence_latched
     panic_event    = st.session_state.panic_latched
+    temp_event     = st.session_state.temp_latched
 
-    # ===== DÉDUCTION CAUSE ALARME =====
-    alarm_code_or_panic = (
+    # ===== ALARME PROVENANT DU NOEUD 1 =====
+    alarm_from_node1 = (
         mode_alarme == 2
         and not presence_event
-        and not temp_alarm
+        and not panic_event
+        and not temp_event
     )
 
     # ===== ÉTATS =====
     door_open   = (system_enabled == 0)
-    sas_secure  = (system_enabled == 1)
     panic_ready = (panic_event == 0 and mode_alarme == 0)
 
     with zone.container():
@@ -164,23 +172,35 @@ while True:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
 
-            if presence_event:
-                st.markdown("<div class='msg warn'>Présence détectée dans le SAS</div>", unsafe_allow_html=True)
-
-            if temp_alarm:
-                st.markdown("<div class='msg bad'>Température anormalement élevée</div>", unsafe_allow_html=True)
-
             if panic_event:
-                st.markdown("<div class='msg bad'>PANIC ACTIVÉ</div>", unsafe_allow_html=True)
-
-            if alarm_code_or_panic:
                 st.markdown(
-                    "<div class='msg bad'>Accès refusé – code incorrect ou bouton PANIC</div>",
+                    "<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>",
                     unsafe_allow_html=True
                 )
 
-            if not any([presence_event, panic_event, temp_alarm, alarm_code_or_panic]):
-                st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
+            elif temp_event:
+                st.markdown(
+                    "<div class='msg bad'>🔥 Température critique détectée</div>",
+                    unsafe_allow_html=True
+                )
+
+            elif presence_event:
+                st.markdown(
+                    "<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>",
+                    unsafe_allow_html=True
+                )
+
+            elif alarm_from_node1:
+                st.markdown(
+                    "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC déclenché au SAS</div>",
+                    unsafe_allow_html=True
+                )
+
+            else:
+                st.markdown(
+                    "<div class='msg muted'>Aucun événement critique</div>",
+                    unsafe_allow_html=True
+                )
 
             st.markdown("</div>", unsafe_allow_html=True)
 
