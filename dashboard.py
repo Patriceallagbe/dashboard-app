@@ -30,7 +30,6 @@ if "temp_latched" not in st.session_state:
     st.session_state.temp_latched = 0
 
 # ================= MQTT SETUP =================
-# On utilise le session_state pour garder le client actif sans le recréer
 if "mqtt_client" not in st.session_state:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
@@ -55,37 +54,50 @@ else:
 # ================= STYLE =================
 st.markdown("""
 <style>
-    .title { font-size:38px; font-weight:900; color:#00d4ff; text-align:center; margin-bottom:25px; }
+    .title { font-size:42px; font-weight:900; color:#00d4ff; text-align:center; margin-bottom:10px; }
+    .subtitle { text-align:center; color:#9aa4b2; margin-bottom:30px; font-size:14px; }
     .panel { background:#161b22; padding:22px; border-radius:14px; color:white; }
     .msg { padding:14px; border-radius:12px; margin:10px 0; font-weight:700; background:#0d1117; }
     .ok { color:#00ff4c; }
     .bad { color:#ff2b2b; }
     .warn { color:#ffe600; }
     .muted { color:#9aa4b2; }
+    
+    /* Style du bouton centré */
+    .stButton > button {
+        display: block;
+        margin: 0 auto;
+        background-color: #ff2b2b;
+        color: white;
+        border-radius: 10px;
+        font-weight: bold;
+        padding: 10px 25px;
+        border: none;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= UI : TITRE & BOUTON COMMANDE =================
+# ================= HEADER & BOUTON =================
 st.markdown("<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
 
-# Barre latérale pour la commande afin de ne pas gêner l'affichage central
-with st.sidebar:
-    st.header("Contrôle Alarme")
+# Centrage du bouton et du message de statut
+col_btn_1, col_btn_2, col_btn_3 = st.columns([1, 1, 1])
+with col_btn_2:
     if st.button("🔴 ACTIVER ALARME GLOBALE"):
         client.publish(MQTT_TOPIC_CMD, json.dumps({"global_alarm": 1}), qos=1)
         st.error("🚨 Alarme Globale activée !")
     
-    st.write(f"Dernier refresh : {st.session_state.last_update}")
+    st.markdown(f"<div class='subtitle'>Dernier refresh : {st.session_state.last_update}</div>", unsafe_allow_html=True)
 
-# Conteneur vide pour le rafraîchissement dynamique
+st.divider()
+
+# Conteneur pour les colonnes de données
 zone = st.empty()
 
-# ================= LOOP (LE MOTEUR) =================
+# ================= LOOP =================
 while True:
-    # 1. On traite les messages MQTT entrants
     client.loop(timeout=0.05)
     
-    # 2. On récupère les données
     d = st.session_state.data
     presence       = int(d.get("presence", 0))
     panic          = int(d.get("panic", 0))
@@ -96,7 +108,7 @@ while True:
     hum            = d.get("hum", "--")
     ldr            = d.get("ldr", "--")
 
-    # 3. Logique de Latch
+    # Latch Logic
     if presence == 1: st.session_state.presence_latched = 1
     if panic == 1:    st.session_state.panic_latched = 1
     if temp_alarm == 1: st.session_state.temp_latched = 1
@@ -114,11 +126,11 @@ while True:
     door_open   = (system_enabled == 0)
     panic_ready = (panic_event == 0 and mode_alarme == 0)
 
-    # 4. Affichage dynamique
+    # Affichage
     with zone.container():
-        col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
+        c1, c2, c3 = st.columns([1.2, 1.8, 1.2])
 
-        with col1:
+        with c1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du SAS")
             st.markdown(f"<div class='msg {'ok' if system_enabled else 'bad'}'>{'Sécurité activée' if system_enabled else 'Sécurité désactivée'}</div>", unsafe_allow_html=True)
@@ -126,7 +138,7 @@ while True:
             st.markdown(f"<div class='msg {'ok' if panic_ready else 'bad'}'>{'Panic disponible' if panic_ready else 'Panic indisponible'}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        with col2:
+        with c2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
             if panic_event:
@@ -136,12 +148,12 @@ while True:
             elif presence_event:
                 st.markdown("<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
             elif alarm_from_node1:
-                st.markdown("<div class='msg bad'>⛔ Accès refusé – Alarme externe</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>⛔ Accès refusé – Code incorrect</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        with col3:
+        with c3:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Capteurs")
             st.metric("Température", f"{temp} °C")
