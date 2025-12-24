@@ -1,5 +1,3 @@
-
-Vous avez dit :
 import streamlit as st
 import time
 import json
@@ -247,3 +245,4 @@ while True:
             st.markdown("</div>", unsafe_allow_html=True)
 
     time.sleep(0.5)
+
