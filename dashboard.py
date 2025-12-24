@@ -2,7 +2,6 @@ import streamlit as st
 import time
 import json
 import paho.mqtt.client as mqtt
-from streamlit_autorefresh import st_autorefresh
 
 # ================= CONFIG =================
 st.set_page_config(
@@ -44,7 +43,7 @@ def on_message(client, userdata, msg):
         pass
 
 if "state_client" not in st.session_state:
-    state_client = mqtt.Client(client_id="streamlit_state")
+    state_client = mqtt.Client("streamlit_state")
     state_client.on_connect = on_connect
     state_client.on_message = on_message
     state_client.connect(MQTT_BROKER, MQTT_PORT, 60)
@@ -52,16 +51,13 @@ if "state_client" not in st.session_state:
 else:
     state_client = st.session_state.state_client
 
-# ================= MQTT COMMAND CLIENT =================
+# ================= MQTT CMD CLIENT =================
 if "cmd_client" not in st.session_state:
-    cmd_client = mqtt.Client(client_id="streamlit_cmd")
+    cmd_client = mqtt.Client("streamlit_cmd")
     cmd_client.connect(MQTT_BROKER, MQTT_PORT, 60)
     st.session_state.cmd_client = cmd_client
 else:
     cmd_client = st.session_state.cmd_client
-
-# ================= AUTO REFRESH =================
-st_autorefresh(interval=500, key="refresh")
 
 # ================= MQTT LOOP =================
 state_client.loop(timeout=0.05)
@@ -70,33 +66,12 @@ state_client.loop(timeout=0.05)
 st.markdown("""
 <style>
 body { background:#0d1117; }
-
-.title {
-    font-size:38px;
-    font-weight:900;
-    color:#00d4ff;
-    text-align:center;
-    margin-bottom:25px;
-}
-
-.panel {
-    background:#161b22;
-    padding:22px;
-    border-radius:14px;
-    color:white;
-}
-
-.msg {
-    padding:14px;
-    border-radius:12px;
-    margin:10px 0;
-    font-weight:700;
-    background:#0d1117;
-}
-
-.ok    { color:#00ff4c; }
-.bad   { color:#ff2b2b; }
-.warn  { color:#ffe600; }
+.title { font-size:38px; font-weight:900; color:#00d4ff; text-align:center; }
+.panel { background:#161b22; padding:22px; border-radius:14px; color:white; }
+.msg { padding:14px; border-radius:12px; margin:10px 0; font-weight:700; background:#0d1117; }
+.ok { color:#00ff4c; }
+.bad { color:#ff2b2b; }
+.warn { color:#ffe600; }
 .muted { color:#9aa4b2; }
 </style>
 """, unsafe_allow_html=True)
@@ -106,7 +81,6 @@ st.markdown("<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>", unsafe_a
 
 # ================= COMMANDE =================
 colA, colB, colC = st.columns([1, 2, 1])
-
 with colB:
     if st.button("🔴 ACTIVER ALARME GLOBALE", use_container_width=True):
         cmd_client.publish(
@@ -122,7 +96,7 @@ d = st.session_state.data
 presence       = int(d.get("presence", 0))
 panic          = int(d.get("panic", 0))
 temp_alarm     = int(d.get("temp_alarm", 0))
-mode_alarme    = int(d.get("mode_alarme", 0))   # 0=OFF / 2=ALARME
+mode_alarme    = int(d.get("mode_alarme", 0))
 system_enabled = int(d.get("system_enabled", 0))
 
 temp = d.get("temp", "--")
@@ -162,9 +136,8 @@ col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 with col1:
     st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.subheader("État du SAS")
-    st.markdown(f"<div class='msg {'ok' if system_enabled else 'bad'}'>{'Sécurité activée' if system_enabled else 'Sécurité désactivée'}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='msg {'bad' if door_open else 'ok'}'>{'Porte SAS ouverte' if door_open else 'Porte SAS fermée'}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='msg {'ok' if panic_ready else 'bad'}'>{'Panic disponible' if panic_ready else 'Panic indisponible'}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='msg {'ok' if system_enabled else 'bad'}'>Sécurité {'activée' if system_enabled else 'désactivée'}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='msg {'bad' if door_open else 'ok'}'>Porte SAS {'ouverte' if door_open else 'fermée'}</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 with col2:
@@ -189,3 +162,7 @@ with col3:
     st.metric("Humidité (%)", hum)
     st.metric("Luminosité", ldr)
     st.markdown("</div>", unsafe_allow_html=True)
+
+# ================= AUTO RERUN =================
+time.sleep(0.5)
+st.experimental_rerun()
