@@ -11,7 +11,9 @@ st.set_page_config(
 
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
-MQTT_TOPIC  = "noeud2/state"
+
+TOPIC_STATE = "noeud2/state"
+TOPIC_CMD   = "sas/dashboard/cmd"   # vers Node-RED
 
 # ================= SESSION STATE =================
 if "data" not in st.session_state:
@@ -30,10 +32,10 @@ if "panic_latched" not in st.session_state:
 if "temp_latched" not in st.session_state:
     st.session_state.temp_latched = 0
 
-# ================= MQTT =================
+# ================= MQTT STATE CLIENT =================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        client.subscribe(MQTT_TOPIC)
+        client.subscribe(TOPIC_STATE)
 
 def on_message(client, userdata, msg):
     try:
@@ -43,10 +45,14 @@ def on_message(client, userdata, msg):
     except:
         pass
 
-client = mqtt.Client()
-client.on_connect = on_connect
-client.on_message = on_message
-client.connect(MQTT_BROKER, MQTT_PORT, 60)
+state_client = mqtt.Client(client_id="streamlit_state")
+state_client.on_connect = on_connect
+state_client.on_message = on_message
+state_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+
+# ================= MQTT COMMAND CLIENT =================
+cmd_client = mqtt.Client(client_id="streamlit_cmd")
+cmd_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
 # ================= STYLE =================
 st.markdown("""
@@ -89,18 +95,31 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ================= COMMANDE GLOBALE =================
+col_cmd1, col_cmd2, col_cmd3 = st.columns([1, 2, 1])
+
+with col_cmd2:
+    if st.button("🔴 ACTIVER ALARME GLOBALE", use_container_width=True):
+        cmd_client.publish(
+            TOPIC_CMD,
+            json.dumps({"global_alarm": 1}),
+            qos=1
+        )
+        st.success("Commande envoyée : global_alarm = 1")
+
 zone = st.empty()
 
 # ================= LOOP =================
 while True:
-    client.loop(timeout=0.1)
+    state_client.loop(timeout=0.1)
+
     d = st.session_state.data
 
     # ===== MQTT DATA =====
-    presence       = int(d.get("presence", 0))     # PIR
+    presence       = int(d.get("presence", 0))
     panic          = int(d.get("panic", 0))
     temp_alarm     = int(d.get("temp_alarm", 0))
-    mode_alarme    = int(d.get("mode_alarme", 0))  # 0 = OFF / 2 = ALARME
+    mode_alarme    = int(d.get("mode_alarme", 0))   # 0 = OFF / 2 = ALARME
     system_enabled = int(d.get("system_enabled", 0))
 
     temp = d.get("temp", "--")
@@ -117,7 +136,7 @@ while True:
     if temp_alarm == 1:
         st.session_state.temp_latched = 1
 
-    # RESET UNIQUEMENT quand l’alarme est désactivée
+    # RESET uniquement quand alarme OFF
     if mode_alarme == 0:
         st.session_state.presence_latched = 0
         st.session_state.panic_latched = 0
@@ -173,34 +192,15 @@ while True:
             st.subheader("Événements")
 
             if panic_event:
-                st.markdown(
-                    "<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>",
-                    unsafe_allow_html=True
-                )
-
+                st.markdown("<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>", unsafe_allow_html=True)
             elif temp_event:
-                st.markdown(
-                    "<div class='msg bad'>🔥 Température critique détectée</div>",
-                    unsafe_allow_html=True
-                )
-
+                st.markdown("<div class='msg bad'>🔥 Température critique détectée</div>", unsafe_allow_html=True)
             elif presence_event:
-                st.markdown(
-                    "<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>",
-                    unsafe_allow_html=True
-                )
-
+                st.markdown("<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
             elif alarm_from_node1:
-                st.markdown(
-                    "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC déclenché au SAS</div>",
-                    unsafe_allow_html=True
-                )
-
+                st.markdown("<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC déclenché au SAS</div>", unsafe_allow_html=True)
             else:
-                st.markdown(
-                    "<div class='msg muted'>Aucun événement critique</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
