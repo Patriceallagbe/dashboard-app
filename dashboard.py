@@ -11,7 +11,9 @@ st.set_page_config(
 
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
-MQTT_TOPIC  = "noeud2/state"
+
+TOPIC_STATE = "noeud2/state"
+TOPIC_CMD   = "sas/dashboard/cmd"   # vers Node-RED
 
 # ================= SESSION STATE =================
 if "data" not in st.session_state:
@@ -30,10 +32,10 @@ if "panic_latched" not in st.session_state:
 if "temp_latched" not in st.session_state:
     st.session_state.temp_latched = 0
 
-# ================= MQTT =================
+# ================= MQTT STATE CLIENT =================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        client.subscribe(MQTT_TOPIC)
+        client.subscribe(TOPIC_STATE)
 
 def on_message(client, userdata, msg):
     try:
@@ -43,10 +45,14 @@ def on_message(client, userdata, msg):
     except:
         pass
 
-client = mqtt.Client()
-client.on_connect = on_connect
-client.on_message = on_message
-client.connect(MQTT_BROKER, MQTT_PORT, 60)
+state_client = mqtt.Client()
+state_client.on_connect = on_connect
+state_client.on_message = on_message
+state_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+
+# ================= MQTT CMD CLIENT =================
+cmd_client = mqtt.Client()
+cmd_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
 # ================= STYLE =================
 st.markdown("""
@@ -89,18 +95,43 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ================= COMMANDES DISTANTES =================
+st.markdown("## 🚨 Commandes distantes")
+
+c1, c2 = st.columns(2)
+
+with c1:
+    if st.button("🔴 ACTIVER ALARME GLOBALE"):
+        cmd_client.publish(
+            TOPIC_CMD,
+            json.dumps({"global_alarm": 1}),
+            qos=2
+        )
+        st.success("Commande ACTIVER envoyée")
+
+with c2:
+    if st.button("🟢 DÉSACTIVER ALARME GLOBALE"):
+        cmd_client.publish(
+            TOPIC_CMD,
+            json.dumps({"global_alarm": 0}),
+            qos=2
+        )
+        st.success("Commande DÉSACTIVER envoyée")
+
+st.markdown("---")
+
 zone = st.empty()
 
-# ================= LOOP =================
+# ================= LOOP PRINCIPALE =================
 while True:
-    client.loop(timeout=0.1)
+    state_client.loop(timeout=0.1)
     d = st.session_state.data
 
     # ===== MQTT DATA =====
-    presence       = int(d.get("presence", 0))     # PIR
+    presence       = int(d.get("presence", 0))
     panic          = int(d.get("panic", 0))
     temp_alarm     = int(d.get("temp_alarm", 0))
-    mode_alarme    = int(d.get("mode_alarme", 0))  # 0 = OFF / 2 = ALARME
+    mode_alarme    = int(d.get("mode_alarme", 0))  # 0 normal / 2 alarme
     system_enabled = int(d.get("system_enabled", 0))
 
     temp = d.get("temp", "--")
@@ -117,7 +148,7 @@ while True:
     if temp_alarm == 1:
         st.session_state.temp_latched = 1
 
-    # RESET UNIQUEMENT quand l’alarme est désactivée
+    # reset UNIQUEMENT quand l’alarme est arrêtée
     if mode_alarme == 0:
         st.session_state.presence_latched = 0
         st.session_state.panic_latched = 0
@@ -127,7 +158,7 @@ while True:
     panic_event    = st.session_state.panic_latched
     temp_event     = st.session_state.temp_latched
 
-    # ===== ALARME PROVENANT DU NOEUD 1 =====
+    # ===== ALARME NOEUD 1 (CODE / PANIC SAS) =====
     alarm_from_node1 = (
         mode_alarme == 2
         and not presence_event
@@ -135,14 +166,14 @@ while True:
         and not temp_event
     )
 
-    # ===== ÉTATS =====
+    # ===== ETATS =====
     door_open   = (system_enabled == 0)
     panic_ready = (panic_event == 0 and mode_alarme == 0)
 
     with zone.container():
         col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
-        # ================= ÉTAT DU SAS =================
+        # ================= ETAT DU SAS =================
         with col1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du SAS")
@@ -167,7 +198,7 @@ while True:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # ================= ÉVÉNEMENTS =================
+        # ================= EVENEMENTS =================
         with col2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
@@ -192,7 +223,7 @@ while True:
 
             elif alarm_from_node1:
                 st.markdown(
-                    "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC déclenché au SAS</div>",
+                    "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC SAS</div>",
                     unsafe_allow_html=True
                 )
 
