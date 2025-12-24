@@ -18,9 +18,6 @@ MQTT_TOPIC_CMD   = "sas/dashboard/cmd"
 if "data" not in st.session_state:
     st.session_state.data = {}
 
-if "last_update" not in st.session_state:
-    st.session_state.last_update = "--:--:--"
-
 # LATCH EVENTS
 if "presence_latched" not in st.session_state:
     st.session_state.presence_latched = 0
@@ -39,7 +36,6 @@ if "mqtt_client" not in st.session_state:
         try:
             payload = json.loads(msg.payload.decode())
             st.session_state.data.update(payload)
-            st.session_state.last_update = time.strftime("%H:%M:%S")
         except:
             pass
 
@@ -54,8 +50,7 @@ else:
 # ================= STYLE =================
 st.markdown("""
 <style>
-    .title { font-size:42px; font-weight:900; color:#00d4ff; text-align:center; margin-bottom:10px; }
-    .subtitle { text-align:center; color:#9aa4b2; margin-bottom:30px; font-size:14px; }
+    .title { font-size:42px; font-weight:900; color:#00d4ff; text-align:center; margin-bottom:20px; }
     .panel { background:#161b22; padding:22px; border-radius:14px; color:white; }
     .msg { padding:14px; border-radius:12px; margin:10px 0; font-weight:700; background:#0d1117; }
     .ok { color:#00ff4c; }
@@ -63,7 +58,6 @@ st.markdown("""
     .warn { color:#ffe600; }
     .muted { color:#9aa4b2; }
     
-    /* Style du bouton centré */
     .stButton > button {
         display: block;
         margin: 0 auto;
@@ -84,18 +78,13 @@ st.markdown("""
 # ================= HEADER & BOUTON =================
 st.markdown("<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
 
-# Centrage du bouton (Sans pop-up de confirmation)
 col_btn_1, col_btn_2, col_btn_3 = st.columns([1, 1, 1])
 with col_btn_2:
-    if st.button("🔴 ACTIVER ALARME GLOBALE"):
-        # Envoi direct sans st.error() ou st.success()
+    if st.button("ACTIVER ALARME GLOBALE"):
         client.publish(MQTT_TOPIC_CMD, json.dumps({"global_alarm": 1}), qos=1)
-    
-    st.markdown(f"<div class='subtitle'>Dernier refresh : {st.session_state.last_update}</div>", unsafe_allow_html=True)
 
 st.divider()
 
-# Conteneur pour les colonnes de données
 zone = st.empty()
 
 # ================= LOOP =================
@@ -146,13 +135,13 @@ while True:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
             if panic_event:
-                st.markdown("<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>PANIC ACTIVÉ – Intervention immédiate</div>", unsafe_allow_html=True)
             elif temp_event:
-                st.markdown("<div class='msg bad'>🔥 Température critique détectée</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>Température critique détectée</div>", unsafe_allow_html=True)
             elif presence_event:
-                st.markdown("<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg warn'>Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
             elif alarm_from_node1:
-                st.markdown("<div class='msg bad'>⛔ Accès refusé – Alarme distante</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>Accès refusé – Alarme distante</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
