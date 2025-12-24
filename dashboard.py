@@ -11,7 +11,7 @@ st.set_page_config(
 
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
-MQTT_TOPIC_STATE = "streamlit/esp32"
+MQTT_TOPIC_STATE = 
 MQTT_TOPIC_CMD   = "sas/dashboard/cmd"
 
 # ================= SESSION STATE =================
@@ -155,4 +155,5 @@ while True:
             st.markdown("</div>", unsafe_allow_html=True)
 
     time.sleep(0.4)
+
 
