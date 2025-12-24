@@ -98,7 +98,7 @@ st.markdown(
 # ================= COMMANDES DISTANTES =================
 st.markdown("## 🚨 Commandes distantes")
 
-# ✅ MODIF UNIQUE : UN SEUL bouton, envoie UNIQUEMENT global_alarm = 1
+# ✅ SEULE MODIFICATION : UN SEUL BOUTON, global_alarm = 1
 if st.button("🔴 ACTIVER ALARME GLOBALE"):
     cmd_client.publish(
         TOPIC_CMD,
