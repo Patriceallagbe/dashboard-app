@@ -74,18 +74,22 @@ st.markdown("""
         padding: 10px 25px;
         border: none;
     }
+    .stButton > button:hover {
+        background-color: #cc0000;
+        color: white;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ================= HEADER & BOUTON =================
 st.markdown("<div class='title'>EPHEC – SECURITY CONTROL ROOM</div>", unsafe_allow_html=True)
 
-# Centrage du bouton et du message de statut
+# Centrage du bouton (Sans pop-up de confirmation)
 col_btn_1, col_btn_2, col_btn_3 = st.columns([1, 1, 1])
 with col_btn_2:
     if st.button("🔴 ACTIVER ALARME GLOBALE"):
+        # Envoi direct sans st.error() ou st.success()
         client.publish(MQTT_TOPIC_CMD, json.dumps({"global_alarm": 1}), qos=1)
-        st.error("🚨 Alarme Globale activée !")
     
     st.markdown(f"<div class='subtitle'>Dernier refresh : {st.session_state.last_update}</div>", unsafe_allow_html=True)
 
@@ -148,7 +152,7 @@ while True:
             elif presence_event:
                 st.markdown("<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
             elif alarm_from_node1:
-                st.markdown("<div class='msg bad'>⛔ Accès refusé – Code incorrect</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>⛔ Accès refusé – Alarme distante</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
