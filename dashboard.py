@@ -96,16 +96,16 @@ st.markdown(
 )
 
 # ================= COMMANDES DISTANTES =================
-st.markdown("## 🚨 Commande distante")
+st.markdown("## 🚨 Commandes distantes")
 
-# 🔴 MODIF : UN SEUL bouton, ENVOI UNIQUEMENT global_alarm = 1
+# ✅ MODIF UNIQUE : UN SEUL bouton, envoie UNIQUEMENT global_alarm = 1
 if st.button("🔴 ACTIVER ALARME GLOBALE"):
     cmd_client.publish(
         TOPIC_CMD,
         json.dumps({"global_alarm": 1}),
         qos=2
     )
-    st.success("Commande envoyée : global_alarm = 1")
+    st.success("Commande ACTIVER envoyée")
 
 st.markdown("---")
 
@@ -120,7 +120,7 @@ while True:
     presence       = int(d.get("presence", 0))
     panic          = int(d.get("panic", 0))
     temp_alarm     = int(d.get("temp_alarm", 0))
-    mode_alarme    = int(d.get("mode_alarme", 0))
+    mode_alarme    = int(d.get("mode_alarme", 0))  # 0 normal / 2 alarme
     system_enabled = int(d.get("system_enabled", 0))
 
     temp = d.get("temp", "--")
@@ -137,6 +137,7 @@ while True:
     if temp_alarm == 1:
         st.session_state.temp_latched = 1
 
+    # reset UNIQUEMENT quand l’alarme est arrêtée
     if mode_alarme == 0:
         st.session_state.presence_latched = 0
         st.session_state.panic_latched = 0
@@ -146,6 +147,7 @@ while True:
     panic_event    = st.session_state.panic_latched
     temp_event     = st.session_state.temp_latched
 
+    # ===== ALARME NOEUD 1 (CODE / PANIC SAS) =====
     alarm_from_node1 = (
         mode_alarme == 2
         and not presence_event
@@ -153,39 +155,76 @@ while True:
         and not temp_event
     )
 
+    # ===== ETATS =====
     door_open   = (system_enabled == 0)
     panic_ready = (panic_event == 0 and mode_alarme == 0)
 
     with zone.container():
         col1, col2, col3 = st.columns([1.2, 1.8, 1.2])
 
+        # ================= ETAT DU SAS =================
         with col1:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("État du SAS")
+
             st.markdown(
                 f"<div class='msg {'ok' if system_enabled else 'bad'}'>"
                 f"{'Sécurité activée' if system_enabled else 'Sécurité désactivée'}</div>",
                 unsafe_allow_html=True
             )
+
+            st.markdown(
+                f"<div class='msg {'bad' if door_open else 'ok'}'>"
+                f"{'Porte SAS ouverte' if door_open else 'Porte SAS fermée'}</div>",
+                unsafe_allow_html=True
+            )
+
+            st.markdown(
+                f"<div class='msg {'ok' if panic_ready else 'bad'}'>"
+                f"{'Panic disponible' if panic_ready else 'Panic indisponible'}</div>",
+                unsafe_allow_html=True
+            )
+
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # ================= EVENEMENTS =================
         with col2:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Événements")
 
             if panic_event:
-                st.markdown("<div class='msg bad'>🚨 PANIC ACTIVÉ</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='msg bad'>🚨 PANIC ACTIVÉ – Intervention immédiate</div>",
+                    unsafe_allow_html=True
+                )
+
             elif temp_event:
-                st.markdown("<div class='msg bad'>🔥 Température critique</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='msg bad'>🔥 Température critique détectée</div>",
+                    unsafe_allow_html=True
+                )
+
             elif presence_event:
-                st.markdown("<div class='msg warn'>⚠️ Présence détectée</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='msg warn'>⚠️ Présence détectée dans le SAS – DANGER</div>",
+                    unsafe_allow_html=True
+                )
+
             elif alarm_from_node1:
-                st.markdown("<div class='msg bad'>⛔ Accès refusé</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='msg bad'>⛔ Accès refusé – Code incorrect ou PANIC SAS</div>",
+                    unsafe_allow_html=True
+                )
+
             else:
-                st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='msg muted'>Aucun événement critique</div>",
+                    unsafe_allow_html=True
+                )
 
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # ================= CAPTEURS =================
         with col3:
             st.markdown("<div class='panel'>", unsafe_allow_html=True)
             st.subheader("Capteurs")
