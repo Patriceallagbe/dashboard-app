@@ -11,9 +11,7 @@ st.set_page_config(
 
 MQTT_BROKER = "51.103.240.103"
 MQTT_PORT   = 1883
-
-TOPIC_STATE = "noeud2/state"
-TOPIC_CMD   = "sas/dashboard/cmd"
+MQTT_TOPIC  = "noeud2/state"
 
 # ================= SESSION STATE =================
 if "data" not in st.session_state:
@@ -31,10 +29,10 @@ if "panic_latched" not in st.session_state:
 if "temp_latched" not in st.session_state:
     st.session_state.temp_latched = 0
 
-# ================= MQTT STATE CLIENT =================
+# ================= MQTT =================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        client.subscribe(TOPIC_STATE)
+        client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
     try:
@@ -44,15 +42,11 @@ def on_message(client, userdata, msg):
     except:
         pass
 
-state_client = mqtt.Client(client_id="streamlit_state")
-state_client.on_connect = on_connect
-state_client.on_message = on_message
-state_client.connect(MQTT_BROKER, MQTT_PORT, 60)
-state_client.loop_start()
-
-# ================= MQTT CMD CLIENT =================
-cmd_client = mqtt.Client(client_id="streamlit_cmd")
-cmd_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client = mqtt.Client()
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+client.loop_start()
 
 # ================= UI =================
 st.title("🚨 EPHEC – Security Control Room")
@@ -63,7 +57,7 @@ with zone:
     d = st.session_state.data
 
     # ===== MQTT DATA =====
-    presence       = int(d.get("presence", 0))
+    presence       = int(d.get("presence", 0))      # PIR
     panic          = int(d.get("panic", 0))
     temp_alarm     = int(d.get("temp_alarm", 0))
     mode_alarme    = int(d.get("mode_alarme", 0))   # 0 = OFF / 2 = ALARME
@@ -72,7 +66,7 @@ with zone:
     temp = d.get("temp", "--")
     hum  = d.get("hum", "--")
 
-    # ===== LATCH =====
+    # ===== LATCH EVENTS =====
     if presence == 1:
         st.session_state.presence_latched = 1
 
@@ -82,6 +76,7 @@ with zone:
     if temp_alarm == 1:
         st.session_state.temp_latched = 1
 
+    # RESET UNIQUEMENT quand l’alarme est désactivée
     if mode_alarme == 0:
         st.session_state.presence_latched = 0
         st.session_state.panic_latched = 0
@@ -91,7 +86,7 @@ with zone:
     panic_event    = st.session_state.panic_latched
     temp_event     = st.session_state.temp_latched
 
-    # ===== DÉTECTION ALARME NODE 1 =====
+    # ===== ALARME PROVENANT DU NOEUD 1 =====
     alarm_from_node1 = (
         mode_alarme == 2
         and not presence_event
@@ -104,13 +99,12 @@ with zone:
     door_open  = (system_enabled == 0)
     sas_secure = (system_enabled == 1)
 
-    # ================= PANNEAU ÉTATS =================
+    # ================= AFFICHAGE =================
     st.subheader("État du système")
     st.write(f"🕒 Dernière mise à jour : {st.session_state.last_update}")
     st.write(f"🌡 Température : {temp} °C")
     st.write(f"💧 Humidité : {hum} %")
 
-    # ================= ÉVÉNEMENTS =================
     st.subheader("Événements")
 
     if panic_event:
@@ -120,22 +114,10 @@ with zone:
         st.error("🔥 Température critique détectée")
 
     elif presence_event:
-        st.warning("⚠️ Présence détectée dans le SAS")
+        st.warning("⚠️ Présence détectée dans le SAS – DANGER")
 
     elif alarm_from_node1:
         st.error("⛔ Accès refusé – Code incorrect ou PANIC déclenché au SAS")
 
     else:
         st.success("✅ Aucun événement critique")
-
-    # ================= COMMANDES =================
-    st.divider()
-    st.subheader("Commandes opérateur")
-
-    if st.button("🔴 ACTIVER ALARME GLOBALE"):
-        cmd_client.publish(
-            TOPIC_CMD,
-            json.dumps({"global_alarm": 1}),
-            qos=1
-        )
-        st.success("Commande envoyée : global_alarm = 1")
