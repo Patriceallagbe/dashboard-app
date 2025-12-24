@@ -141,7 +141,7 @@ while True:
             elif presence_event:
                 st.markdown("<div class='msg warn'>Présence détectée dans le SAS – DANGER</div>", unsafe_allow_html=True)
             elif alarm_from_node1:
-                st.markdown("<div class='msg bad'>Accès refusé – Alarme distante</div>", unsafe_allow_html=True)
+                st.markdown("<div class='msg bad'>Accès refusé – Alarmes actives</div>", unsafe_allow_html=True)
             else:
                 st.markdown("<div class='msg muted'>Aucun événement critique</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
@@ -155,6 +155,7 @@ while True:
             st.markdown("</div>", unsafe_allow_html=True)
 
     time.sleep(0.4)
+
 
 
 
